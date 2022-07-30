@@ -1,20 +1,15 @@
-use crate::{mock::*, Error};
-use frame_support::{assert_noop, assert_ok};
+use crate::mock::*;
+use frame_support::{assert_ok, pallet_prelude::*};
+// use sp_core::Hasher;
 
 #[test]
-fn it_works_for_default_value() {
+fn submitting_a_proposal_adds_it_to_queued_proposals() {
 	new_test_ext().execute_with(|| {
-		// Dispatch a signed extrinsic.
-		assert_ok!(TemplateModule::do_something(Origin::signed(1), 42));
-		// Read pallet storage and assert an expected result.
-		assert_eq!(TemplateModule::something(), Some(42));
-	});
-}
-
-#[test]
-fn correct_error_for_none_value() {
-	new_test_ext().execute_with(|| {
-		// Ensure the expected error is thrown when no value is present.
-		assert_noop!(TemplateModule::cause_error(Origin::signed(1)), Error::<Test>::NoneValue);
+		assert_ok!(TemplateModule::submit_proposal(
+			Origin::signed(1),
+			"Should we buy DOT?".encode()
+		));
+		assert_eq!(TemplateModule::queued_proposals().unwrap().len(), 1);
+		assert_eq!(TemplateModule::queued_proposals().unwrap()[0], "Should we buy DOT?".encode());
 	});
 }

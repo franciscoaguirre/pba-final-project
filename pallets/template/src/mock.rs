@@ -1,5 +1,5 @@
 use crate as pallet_template;
-use frame_support::traits::{ConstU16, ConstU64};
+use frame_support::traits::{ConstU16, ConstU32, ConstU64};
 use frame_system as system;
 use sp_core::H256;
 use sp_runtime::{
@@ -51,6 +51,7 @@ impl system::Config for Test {
 
 impl pallet_template::Config for Test {
 	type Event = Event;
+	type MaxProposalLength = ConstU32<256>;
 }
 
 // Build genesis storage according to the mock runtime.

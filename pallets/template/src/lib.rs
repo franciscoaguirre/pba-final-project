@@ -1,8 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-/// Edit this file to define custom logic or remove it if it is not needed.
-/// Learn more about FRAME and the core library of Substrate FRAME pallets:
-/// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
 #[cfg(test)]
@@ -18,85 +15,104 @@ mod benchmarking;
 pub mod pallet {
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
+	use sp_std::vec::Vec;
 
-	/// Configure the pallet by specifying the parameters and types on which it depends.
+	type Proposal<T> = BoundedVec<u8, <T as Config>::MaxProposalLength>;
+
+	/// The order of the variants matter because they are stored in order in the ProposalVotes map
+	#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone, TypeInfo)]
+	pub enum Vote {
+		Aye,
+		Nay,
+	}
+
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+
+		#[pallet::constant]
+		type MaxProposalLength: Get<u32>;
 	}
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-	// The pallet's runtime storage items.
-	// https://docs.substrate.io/v3/runtime/storage
 	#[pallet::storage]
-	#[pallet::getter(fn something)]
-	// Learn more about declaring storage items:
-	// https://docs.substrate.io/v3/runtime/storage#declaring-storage-items
-	pub type Something<T> = StorageValue<_, u32>;
+	#[pallet::getter(fn queued_proposals)]
+	pub type QueuedProposals<T> = StorageValue<_, BoundedVec<Proposal<T>, ConstU32<100>>>;
 
-	// Pallets use events to inform users when important changes are made.
-	// https://docs.substrate.io/v3/runtime/events-and-errors
+	/// First is "Aye" and second is "Nay"
+	#[pallet::storage]
+	#[pallet::getter(fn proposal_votes)]
+	pub type ProposalVotes<T> =
+		StorageMap<_, Identity, <T as frame_system::Config>::Hash, (u32, u32), ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn active_referendum)]
+	pub type ActiveReferendum<T> = StorageValue<_, ()>;
+
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Event documentation should end with an array that provides descriptive names for event
-		/// parameters. [something, who]
-		SomethingStored(u32, T::AccountId),
+		/// A proposal was successfully submitted
+		ProposalSubmitted(Proposal<T>, T::AccountId),
+		/// A vote was successfully submitted
+		VoteSubmitted(Vote, T::AccountId),
 	}
 
-	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
-		/// Errors should have helpful documentation associated with them.
-		StorageOverflow,
+		/// Proposal text is too long
+		ProposalTooLong,
+		/// Proposal queue is full
+		ProposalQueueFull,
+		// /// Proposal has already been submitted
+		// ProposalAlreadySubmitted,
+		/// No active referendum right now
+		NoActiveReferendum,
+		/// Overflow error
+		Overflow,
 	}
 
-	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
-	// These functions materialize as "extrinsics", which are often compared to transactions.
-	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// An example dispatchable that takes a singles value as a parameter, writes the value to
-		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/v3/runtime/origins
+		pub fn submit_proposal(origin: OriginFor<T>, raw_proposal: Vec<u8>) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
-			// Update storage.
-			<Something<T>>::put(something);
+			let proposal: Proposal<T> =
+				raw_proposal.try_into().map_err(|()| Error::<T>::ProposalTooLong)?;
 
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored(something, who));
-			// Return a successful DispatchResultWithPostInfo
+			// TODO: Check if proposal already exists
+
+			QueuedProposals::<T>::try_append(proposal.clone())
+				.map_err(|()| Error::<T>::ProposalQueueFull)?;
+
+			Self::deposit_event(Event::ProposalSubmitted(proposal, who));
+
 			Ok(())
 		}
 
-		/// An example dispatchable that may throw a custom error.
-		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1) + T::DbWeight::get().reads(1))]
+		pub fn submit_vote(
+			origin: OriginFor<T>,
+			proposal_hash: T::Hash,
+			vote: Vote,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
 
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => return Err(Error::<T>::NoneValue.into()),
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
-			}
+			ensure!(ActiveReferendum::<T>::exists(), Error::<T>::NoActiveReferendum);
+
+			ProposalVotes::<T>::try_mutate(proposal_hash, |(aye_votes, nay_votes)| match &vote {
+				Vote::Aye => aye_votes.checked_add(1).ok_or(Error::<T>::Overflow),
+				Vote::Nay => nay_votes.checked_add(1).ok_or(Error::<T>::Overflow),
+			})?;
+
+			Self::deposit_event(Event::VoteSubmitted(vote, who));
+
+			Ok(())
 		}
 	}
 }
