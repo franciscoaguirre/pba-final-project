@@ -273,6 +273,7 @@ impl pallet_template::Config for Runtime {
 	type MaxProposalLength = ConstU32<256>;
 	type LaunchPeriod = LaunchPeriod;
 	type VotingPeriod = VotingPeriod;
+	type ProposalQueueSize = ConstU32<100>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.

@@ -54,15 +54,16 @@ impl system::Config for Test {
 }
 
 parameter_types! {
-	pub const LaunchPeriod: BlockNumber = 10;
-	pub const VotingPeriod: BlockNumber = 5;
+	pub const LaunchPeriod: BlockNumber = 2;
+	pub const VotingPeriod: BlockNumber = 1;
 }
 
 impl pallet_template::Config for Test {
 	type Event = Event;
-	type MaxProposalLength = ConstU32<256>;
+	type MaxProposalLength = ConstU32<50>;
 	type LaunchPeriod = LaunchPeriod;
 	type VotingPeriod = VotingPeriod;
+	type ProposalQueueSize = ConstU32<1>;
 }
 
 /// Builds genesis storage according to the mock runtime.

@@ -47,6 +47,9 @@ pub mod pallet {
 
 		#[pallet::constant]
 		type VotingPeriod: Get<Self::BlockNumber>;
+
+		#[pallet::constant]
+		type ProposalQueueSize: Get<u32>;
 	}
 
 	#[pallet::pallet]
@@ -55,7 +58,8 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn queued_proposals)]
-	pub type QueuedProposals<T: Config> = StorageValue<_, BoundedVec<Proposal<T>, ConstU32<100>>>;
+	pub type QueuedProposals<T: Config> =
+		StorageValue<_, BoundedVec<Proposal<T>, T::ProposalQueueSize>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn referendum_count)]
@@ -79,6 +83,25 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn active_referendum)]
 	pub type ActiveReferendum<T: Config> = StorageValue<_, ()>;
+
+	// #[pallet::genesis_config]
+	// pub struct GenesisConfig<T> {
+	//     pub
+	// }
+	//
+	// #[cfg(feature = "std")]
+	// impl<T: Config> Default for GenesisConfig<T> {
+	// 	fn default() -> Self {
+	// 		Self { _phantom: Default::default() }
+	// 	}
+	// }
+	//
+	// #[pallet::genesis_build]
+	// impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+	// 	fn build(&self) {
+	// 		ReferendumCount::<T>::put(0 as ReferendumIndex);
+	// 	}
+	// }
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -131,8 +154,6 @@ pub mod pallet {
 
 			let proposal: Proposal<T> =
 				raw_proposal.try_into().map_err(|()| Error::<T>::ProposalTooLong)?;
-
-			// TODO: Check if proposal already exists
 
 			QueuedProposals::<T>::try_append(proposal.clone())
 				.map_err(|()| Error::<T>::ProposalQueueFull)?;
