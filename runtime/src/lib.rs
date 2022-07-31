@@ -262,10 +262,17 @@ impl pallet_sudo::Config for Runtime {
 	type Call = Call;
 }
 
+parameter_types! {
+	pub const LaunchPeriod: BlockNumber = 10;
+	pub const VotingPeriod: BlockNumber = 2;
+}
+
 /// Configure the pallet-template in pallets/template.
 impl pallet_template::Config for Runtime {
 	type Event = Event;
 	type MaxProposalLength = ConstU32<256>;
+	type LaunchPeriod = LaunchPeriod;
+	type VotingPeriod = VotingPeriod;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
