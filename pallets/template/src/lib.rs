@@ -23,6 +23,8 @@ pub mod pallet {
 	use super::*;
 	use frame_support::{dispatch::Weight, pallet_prelude::*};
 	use frame_system::pallet_prelude::{BlockNumberFor, *};
+	use sp_core::Hasher;
+	use sp_runtime::traits::{Saturating, Zero};
 	use sp_std::vec::Vec;
 
 	type Proposal<T> = BoundedVec<u8, <T as Config>::MaxProposalLength>;
@@ -70,7 +72,7 @@ pub mod pallet {
 	/// Twox64Concat is fine to use because referendum_index and proposal_index
 	/// are not controlled by a user.
 	#[pallet::storage]
-	#[pallet::getter(fn proposal_votes)]
+	#[pallet::getter(fn referendum_info)]
 	pub type ReferendumInfo<T: Config> = StorageDoubleMap<
 		_,
 		Twox64Concat,
@@ -81,27 +83,12 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
+	#[pallet::getter(fn referendum_ends_at)]
+	pub type ReferendumEndsAt<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+	#[pallet::storage]
 	#[pallet::getter(fn active_referendum)]
 	pub type ActiveReferendum<T: Config> = StorageValue<_, ()>;
-
-	// #[pallet::genesis_config]
-	// pub struct GenesisConfig<T> {
-	//     pub
-	// }
-	//
-	// #[cfg(feature = "std")]
-	// impl<T: Config> Default for GenesisConfig<T> {
-	// 	fn default() -> Self {
-	// 		Self { _phantom: Default::default() }
-	// 	}
-	// }
-	//
-	// #[pallet::genesis_build]
-	// impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
-	// 	fn build(&self) {
-	// 		ReferendumCount::<T>::put(0 as ReferendumIndex);
-	// 	}
-	// }
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -110,6 +97,10 @@ pub mod pallet {
 		ProposalSubmitted(Proposal<T>, T::AccountId),
 		/// A vote was successfully submitted
 		VoteSubmitted(Vote, T::AccountId),
+		/// Started a referendum
+		ReferendumStarted(ReferendumIndex),
+		/// Referendum ended
+		ReferendumEnded(ReferendumIndex),
 	}
 
 	#[pallet::error]
@@ -126,23 +117,26 @@ pub mod pallet {
 		Overflow,
 		/// Vote submitted too early
 		TooEarly,
+		/// Tried to start a referendum but there were no proposals in the queue
+		NoProposalsInQueue,
 	}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(block_number: BlockNumberFor<T>) -> Weight {
-			let max_block_weight = T::BlockWeights::get().max_block;
+            let referendum_ends_at = ReferendumEndsAt::<T>::get();
 
-			if block_number % T::LaunchPeriod::get() == 0u32.into() {
-				// Start a referendum
-				ActiveReferendum::<T>::put(());
-			} else if block_number % T::VotingPeriod::get() == 0u32.into() {
-				ActiveReferendum::<T>::kill();
+            if block_number == referendum_ends_at {
+                let _ = Self::end_referendum(); // TODO: Deal with error
+            }
+
+			if (block_number % T::LaunchPeriod::get()).is_zero() {
+				let _ = Self::start_referendum(block_number); // TODO: Deal with error
 			}
 
 			// TODO: What weight should I return here?
 
-			max_block_weight
+			0
 		}
 	}
 
@@ -182,10 +176,16 @@ pub mod pallet {
 						ProposalInfo::Finished(_) =>
 							panic!("We already checked current referendum exists; qed"),
 						ProposalInfo::Ongoing(ongoing_info) => match &vote {
-							Vote::Aye =>
-								ongoing_info.aye_votes.checked_add(1).ok_or(Error::<T>::Overflow),
-							Vote::Nay =>
-								ongoing_info.nay_votes.checked_add(1).ok_or(Error::<T>::Overflow),
+							Vote::Aye => ongoing_info
+								.tally
+								.aye_votes
+								.checked_add(1)
+								.ok_or(Error::<T>::Overflow),
+							Vote::Nay => ongoing_info
+								.tally
+								.nay_votes
+								.checked_add(1)
+								.ok_or(Error::<T>::Overflow),
 						},
 					}
 				} else {
@@ -197,5 +197,74 @@ pub mod pallet {
 
 			Ok(())
 		}
+	}
+
+	impl<T: Config> Pallet<T> {
+		fn start_referendum(block_number: T::BlockNumber) -> DispatchResult {
+			// Update referendum index
+			let referendum_index = Self::referendum_count();
+
+			// Build proposal info struct
+			// TODO: Handle multiple proposals per referendum
+			let proposal_index = 0;
+			let mut queued_proposals = Self::queued_proposals();
+
+			ensure!(queued_proposals.len() > 0, Error::<T>::NoProposalsInQueue);
+
+			let proposal_hash = <<T as frame_system::Config>::Hashing as Hasher>::hash(
+				&queued_proposals.remove(proposal_index),
+			);
+
+            ReferendumEndsAt::<T>::put(block_number.saturating_add(T::VotingPeriod::get()));
+
+			let ongoing_proposal_info = OngoingProposalInfo {
+				proposal_hash,
+				tally: Default::default(),
+			};
+			let proposal_info = ProposalInfo::Ongoing(ongoing_proposal_info);
+
+			// Insert new proposal info
+			ReferendumInfo::<T>::insert(
+				referendum_index,
+				proposal_index as ProposalIndex,
+				proposal_info,
+			);
+
+			ActiveReferendum::<T>::put(());
+
+			Self::deposit_event(Event::<T>::ReferendumStarted(referendum_index));
+
+			Ok(())
+		}
+
+        fn end_referendum() -> DispatchResult {
+            let referendum_index = Self::referendum_count();
+            let end = Self::referendum_ends_at();
+
+            // TODO: Handle multiple proposals in the future
+            let proposal_index = 0 as ProposalIndex;
+
+            let old_proposal_info = ReferendumInfo::<T>::get(referendum_index, proposal_index).expect("referendum is ending, old proposal exists; qed");
+            
+            let approved = match old_proposal_info {
+                ProposalInfo::Ongoing(ongoing_proposal_info) => ongoing_proposal_info.tally.result(),
+                ProposalInfo::Finished(_) => panic!("Old proposal has to be ongoing; qed"),
+            };
+
+            let new_proposal_info = ProposalInfo::Finished(FinishedProposalInfo { approved, end });
+
+            ReferendumInfo::<T>::insert(
+                referendum_index,
+                proposal_index,
+                new_proposal_info
+            );
+
+            ActiveReferendum::<T>::kill();
+			ReferendumCount::<T>::put(referendum_index + 1);
+
+            Self::deposit_event(Event::<T>::ReferendumEnded(referendum_index));
+
+            Ok(())
+        }
 	}
 }

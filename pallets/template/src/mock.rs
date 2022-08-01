@@ -74,14 +74,18 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 	ext
 }
 
+pub fn next_block() {
+    System::set_block_number(System::block_number() + 1);
+    System::on_initialize(System::block_number());
+    TemplateModule::on_initialize(System::block_number());
+}
+
 pub fn run_to_block(n: BlockNumber) {
 	while System::block_number() < n {
 		if System::block_number() > 1 {
 			TemplateModule::on_finalize(System::block_number());
 			System::on_finalize(System::block_number());
 		}
-		System::set_block_number(System::block_number() + 1);
-		System::on_initialize(System::block_number());
-		TemplateModule::on_initialize(System::block_number());
+        next_block();
 	}
 }
