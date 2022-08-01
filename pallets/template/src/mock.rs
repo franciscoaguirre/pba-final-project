@@ -1,7 +1,7 @@
 use crate as pallet_template;
 use frame_support::{
 	parameter_types,
-	traits::{ConstU16, ConstU32, ConstU64, Hooks},
+	traits::{ConstU16, ConstU32, ConstU64, GenesisBuild, Hooks},
 };
 use frame_system as system;
 use sp_core::H256;
@@ -21,10 +21,13 @@ frame_support::construct_runtime!(
 		NodeBlock = Block,
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
+		System: frame_system,
+		TemplateModule: pallet_template,
+		Balances: pallet_balances,
 	}
 );
+
+type Balance = u64;
 
 impl system::Config for Test {
 	type BaseCallFilter = frame_support::traits::Everything;
@@ -44,13 +47,25 @@ impl system::Config for Test {
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<Balance>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
 	type SS58Prefix = ConstU16<42>;
 	type OnSetCode = ();
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
+}
+
+impl pallet_balances::Config for Test {
+	type MaxLocks = ();
+	type MaxReserves = ();
+	type ReserveIdentifier = [u8; 8];
+	type Balance = Balance;
+	type DustRemoval = ();
+	type Event = Event;
+	type ExistentialDeposit = ConstU64<1>;
+	type AccountStore = System;
+	type WeightInfo = ();
 }
 
 parameter_types! {
@@ -64,20 +79,26 @@ impl pallet_template::Config for Test {
 	type LaunchPeriod = LaunchPeriod;
 	type VotingPeriod = VotingPeriod;
 	type ProposalQueueSize = ConstU32<1>;
+	type Currency = Balances;
+	type MaxVotes = ConstU32<10>;
+	type TestVoter = ConstU64<1>;
 }
 
 /// Builds genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	pallet_template::GenesisConfig::<Test>::default()
+		.assimilate_storage(&mut t)
+		.unwrap();
 	let mut ext = sp_io::TestExternalities::new(t);
 	ext.execute_with(|| System::set_block_number(1));
 	ext
 }
 
 pub fn next_block() {
-    System::set_block_number(System::block_number() + 1);
-    System::on_initialize(System::block_number());
-    TemplateModule::on_initialize(System::block_number());
+	System::set_block_number(System::block_number() + 1);
+	System::on_initialize(System::block_number());
+	TemplateModule::on_initialize(System::block_number());
 }
 
 pub fn run_to_block(n: BlockNumber) {
@@ -86,6 +107,6 @@ pub fn run_to_block(n: BlockNumber) {
 			TemplateModule::on_finalize(System::block_number());
 			System::on_finalize(System::block_number());
 		}
-        next_block();
+		next_block();
 	}
 }

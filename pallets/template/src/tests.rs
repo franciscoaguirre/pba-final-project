@@ -76,7 +76,7 @@ fn referendum_closes_after_voting_period_blocks() {
 }
 
 #[test]
-fn user_submits_vote_and_vote_count_increases() {
+fn user_submits_vote_happy_path() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(TemplateModule::submit_proposal(
 			Origin::signed(1),
@@ -87,12 +87,75 @@ fn user_submits_vote_and_vote_count_increases() {
 		assert_ok!(TemplateModule::submit_vote(
 			Origin::signed(1),
 			0 as pallet_template::ProposalIndex,
-			pallet_template::Vote::Aye
+			pallet_template::Vote::Aye,
+			5
 		));
-		assert_eq!(TemplateModule::referendum_info(0, 0).unwrap().get_aye_votes(), 1);
+		assert_eq!(TemplateModule::referendum_info(0, 0).unwrap().get_aye_votes(), 5);
+		assert_eq!(TemplateModule::voter_points(1u64).unwrap(), 75u32);
 		assert_eq!(TemplateModule::referendum_info(0, 0).unwrap().get_nay_votes(), 0);
 		assert!(TemplateModule::referendum_info(0, 0).unwrap().is_ongoing());
 		next_block();
 		assert!(TemplateModule::referendum_info(0, 0).unwrap().has_finished());
+	});
+}
+
+#[test]
+fn non_voter_should_not_be_allowed_to_submit_anything() {
+	new_test_ext().execute_with(|| {
+		assert_noop!(
+			TemplateModule::submit_proposal(Origin::signed(2), "Will you let me in?".encode()),
+			Error::<Test>::NotAVoter
+		);
+		assert_ok!(TemplateModule::submit_proposal(Origin::signed(1), "Yeah, right".encode()));
+		run_to_block(LaunchPeriod::get());
+		assert_noop!(
+			TemplateModule::submit_vote(
+				Origin::signed(2),
+				0 as pallet_template::ProposalIndex,
+				pallet_template::Vote::Nay,
+				1
+			),
+			Error::<Test>::NotAVoter
+		);
+	});
+}
+
+#[test]
+fn try_vote_with_not_enough_points() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(TemplateModule::submit_proposal(Origin::signed(1), "Let's go".encode()));
+		run_to_block(LaunchPeriod::get());
+		assert_noop!(
+			TemplateModule::submit_vote(
+				Origin::signed(1),
+				0 as pallet_template::ProposalIndex,
+				pallet_template::Vote::Nay,
+				11
+			),
+			Error::<Test>::NotEnoughPoints
+		);
+	});
+}
+
+#[test]
+fn double_voting_fails() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(TemplateModule::submit_proposal(Origin::signed(1), "Let's go".encode()));
+		run_to_block(LaunchPeriod::get());
+		assert_ok!(TemplateModule::submit_vote(
+			Origin::signed(1),
+			0 as pallet_template::ProposalIndex,
+			pallet_template::Vote::Nay,
+			5
+		));
+		assert_noop!(
+			TemplateModule::submit_vote(
+				Origin::signed(1),
+				0 as pallet_template::ProposalIndex,
+				pallet_template::Vote::Nay,
+				5
+			),
+			Error::<Test>::AlreadyVoted
+		);
 	});
 }
