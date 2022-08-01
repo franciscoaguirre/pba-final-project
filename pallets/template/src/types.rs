@@ -11,9 +11,9 @@ pub struct Tally {
 }
 
 impl Tally {
-    pub fn result(&self) -> bool {
-        self.aye_votes > self.nay_votes
-    }
+	pub fn result(&self) -> bool {
+		self.aye_votes > self.nay_votes
+	}
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -34,4 +34,34 @@ pub struct FinishedProposalInfo<BlockNumber> {
 pub enum ProposalInfo<Hash, BlockNumber> {
 	Ongoing(OngoingProposalInfo<Hash>),
 	Finished(FinishedProposalInfo<BlockNumber>),
+}
+
+impl<Hash, BlockNumber> ProposalInfo<Hash, BlockNumber> {
+	pub fn get_aye_votes(&self) -> u32 {
+		match self {
+			ProposalInfo::Ongoing(ongoing_info) => ongoing_info.tally.aye_votes,
+			_ => unreachable!(),
+		}
+	}
+
+	pub fn get_nay_votes(&self) -> u32 {
+		match self {
+			ProposalInfo::Ongoing(ongoing_info) => ongoing_info.tally.nay_votes,
+			_ => unreachable!(),
+		}
+	}
+
+	pub fn is_ongoing(&self) -> bool {
+		match self {
+			ProposalInfo::Ongoing(_) => true,
+			ProposalInfo::Finished(_) => false,
+		}
+	}
+
+	pub fn has_finished(&self) -> bool {
+		match self {
+			ProposalInfo::Ongoing(_) => false,
+			ProposalInfo::Finished(_) => true,
+		}
+	}
 }

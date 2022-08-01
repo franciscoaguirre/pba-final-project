@@ -67,10 +67,32 @@ fn referendum_closes_after_voting_period_blocks() {
 		assert_eq!(TemplateModule::active_referendum(), None);
 		TemplateModule::submit_proposal(Origin::signed(1), "Should we fill the queue?".encode())
 			.unwrap();
-		run_to_block(<Test as pallet_template::Config>::LaunchPeriod::get());
-        assert_eq!(TemplateModule::active_referendum(), Some(()));
-        assert_eq!(TemplateModule::referendum_ends_at(), 3);
-        next_block();
+		run_to_block(LaunchPeriod::get());
+		assert_eq!(TemplateModule::active_referendum(), Some(()));
+		assert_eq!(TemplateModule::referendum_ends_at(), 3);
+		next_block();
 		assert_eq!(TemplateModule::active_referendum(), None);
+	});
+}
+
+#[test]
+fn user_submits_vote_and_vote_count_increases() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(TemplateModule::submit_proposal(
+			Origin::signed(1),
+			"Should we buy DOT?".encode()
+		));
+		run_to_block(LaunchPeriod::get());
+		assert_eq!(TemplateModule::active_referendum(), Some(()));
+		assert_ok!(TemplateModule::submit_vote(
+			Origin::signed(1),
+			0 as pallet_template::ProposalIndex,
+			pallet_template::Vote::Aye
+		));
+		assert_eq!(TemplateModule::referendum_info(0, 0).unwrap().get_aye_votes(), 1);
+		assert_eq!(TemplateModule::referendum_info(0, 0).unwrap().get_nay_votes(), 0);
+		assert!(TemplateModule::referendum_info(0, 0).unwrap().is_ongoing());
+		next_block();
+		assert!(TemplateModule::referendum_info(0, 0).unwrap().has_finished());
 	});
 }

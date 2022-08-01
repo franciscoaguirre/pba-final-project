@@ -115,8 +115,6 @@ pub mod pallet {
 		NoActiveReferendum,
 		/// Overflow error
 		Overflow,
-		/// Vote submitted too early
-		TooEarly,
 		/// Tried to start a referendum but there were no proposals in the queue
 		NoProposalsInQueue,
 	}
@@ -124,11 +122,11 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(block_number: BlockNumberFor<T>) -> Weight {
-            let referendum_ends_at = ReferendumEndsAt::<T>::get();
+			let referendum_ends_at = ReferendumEndsAt::<T>::get();
 
-            if block_number == referendum_ends_at {
-                let _ = Self::end_referendum(); // TODO: Deal with error
-            }
+			if block_number == referendum_ends_at {
+				let _ = Self::end_referendum(); // TODO: Deal with error
+			}
 
 			if (block_number % T::LaunchPeriod::get()).is_zero() {
 				let _ = Self::start_referendum(block_number); // TODO: Deal with error
@@ -170,28 +168,34 @@ pub mod pallet {
 
 			let current_referendum = ReferendumCount::<T>::get();
 
-			ReferendumInfo::<T>::try_mutate(current_referendum, proposal_index, |maybe_info| {
-				if let Some(proposal_info) = maybe_info {
-					match proposal_info {
-						ProposalInfo::Finished(_) =>
-							panic!("We already checked current referendum exists; qed"),
-						ProposalInfo::Ongoing(ongoing_info) => match &vote {
-							Vote::Aye => ongoing_info
-								.tally
-								.aye_votes
-								.checked_add(1)
-								.ok_or(Error::<T>::Overflow),
-							Vote::Nay => ongoing_info
-								.tally
-								.nay_votes
-								.checked_add(1)
-								.ok_or(Error::<T>::Overflow),
-						},
-					}
-				} else {
-					Err(Error::<T>::TooEarly)
-				}
-			})?;
+			let maybe_info = ReferendumInfo::<T>::get(current_referendum, proposal_index);
+			let mut proposal_info =
+				maybe_info.expect("We already checked current referendum exists; qed");
+			match proposal_info {
+				ProposalInfo::Finished(_) => panic!(
+					"We already checked current referendum
+			exists; qed"
+				),
+				ProposalInfo::Ongoing(ref mut ongoing_info) => match &vote {
+					Vote::Aye => {
+						let aye_votes = ongoing_info
+							.tally
+							.aye_votes
+							.checked_add(1)
+							.ok_or(Error::<T>::Overflow)?;
+						ongoing_info.tally.aye_votes = aye_votes;
+					},
+					Vote::Nay => {
+						let nay_votes = ongoing_info
+							.tally
+							.nay_votes
+							.checked_add(1)
+							.ok_or(Error::<T>::Overflow)?;
+						ongoing_info.tally.nay_votes = nay_votes;
+					},
+				},
+			};
+			ReferendumInfo::<T>::insert(current_referendum, proposal_index, proposal_info);
 
 			Self::deposit_event(Event::VoteSubmitted(vote, who));
 
@@ -215,12 +219,10 @@ pub mod pallet {
 				&queued_proposals.remove(proposal_index),
 			);
 
-            ReferendumEndsAt::<T>::put(block_number.saturating_add(T::VotingPeriod::get()));
+			ReferendumEndsAt::<T>::put(block_number.saturating_add(T::VotingPeriod::get()));
 
-			let ongoing_proposal_info = OngoingProposalInfo {
-				proposal_hash,
-				tally: Default::default(),
-			};
+			let ongoing_proposal_info =
+				OngoingProposalInfo { proposal_hash, tally: Default::default() };
 			let proposal_info = ProposalInfo::Ongoing(ongoing_proposal_info);
 
 			// Insert new proposal info
@@ -237,34 +239,32 @@ pub mod pallet {
 			Ok(())
 		}
 
-        fn end_referendum() -> DispatchResult {
-            let referendum_index = Self::referendum_count();
-            let end = Self::referendum_ends_at();
+		fn end_referendum() -> DispatchResult {
+			let referendum_index = Self::referendum_count();
+			let end = Self::referendum_ends_at();
 
-            // TODO: Handle multiple proposals in the future
-            let proposal_index = 0 as ProposalIndex;
+			// TODO: Handle multiple proposals in the future
+			let proposal_index = 0 as ProposalIndex;
 
-            let old_proposal_info = ReferendumInfo::<T>::get(referendum_index, proposal_index).expect("referendum is ending, old proposal exists; qed");
-            
-            let approved = match old_proposal_info {
-                ProposalInfo::Ongoing(ongoing_proposal_info) => ongoing_proposal_info.tally.result(),
-                ProposalInfo::Finished(_) => panic!("Old proposal has to be ongoing; qed"),
-            };
+			let old_proposal_info = ReferendumInfo::<T>::get(referendum_index, proposal_index)
+				.expect("referendum is ending, old proposal exists; qed");
 
-            let new_proposal_info = ProposalInfo::Finished(FinishedProposalInfo { approved, end });
+			let approved = match old_proposal_info {
+				ProposalInfo::Ongoing(ongoing_proposal_info) =>
+					ongoing_proposal_info.tally.result(),
+				ProposalInfo::Finished(_) => panic!("Old proposal has to be ongoing; qed"),
+			};
 
-            ReferendumInfo::<T>::insert(
-                referendum_index,
-                proposal_index,
-                new_proposal_info
-            );
+			let new_proposal_info = ProposalInfo::Finished(FinishedProposalInfo { approved, end });
 
-            ActiveReferendum::<T>::kill();
+			ReferendumInfo::<T>::insert(referendum_index, proposal_index, new_proposal_info);
+
+			ActiveReferendum::<T>::kill();
 			ReferendumCount::<T>::put(referendum_index + 1);
 
-            Self::deposit_event(Event::<T>::ReferendumEnded(referendum_index));
+			Self::deposit_event(Event::<T>::ReferendumEnded(referendum_index));
 
-            Ok(())
-        }
+			Ok(())
+		}
 	}
 }
