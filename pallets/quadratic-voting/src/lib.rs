@@ -32,7 +32,7 @@ pub mod pallet {
 	type Proposal<T> = BoundedVec<u8, <T as Config>::MaxProposalLength>;
 	type Points = u32;
 
-	/// The order of the variants matter because they are stored in order in the ProposalVotes map
+	/// Vote possibilities
 	#[derive(Encode, Decode, Debug, PartialEq, Eq, Clone, TypeInfo)]
 	pub enum Vote {
 		Aye,
@@ -44,26 +44,39 @@ pub mod pallet {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
+		/// Proposals can't be more than this length
 		#[pallet::constant]
 		type MaxProposalLength: Get<u32>;
 
-		#[pallet::constant]
-		type LaunchPeriod: Get<Self::BlockNumber>;
-
-		#[pallet::constant]
-		type VotingPeriod: Get<Self::BlockNumber>;
-
+		/// Size of the proposal queue
 		#[pallet::constant]
 		type ProposalQueueSize: Get<u32>;
 
+		/// How often (in blocks) new referenda are ran
+		#[pallet::constant]
+		type LaunchPeriod: Get<Self::BlockNumber>;
+
+		/// How long (in blocks) referenda allow votes for until they end
+		#[pallet::constant]
+		type VotingPeriod: Get<Self::BlockNumber>;
+
+		/// Number of proposals to be voted per referendum
+		#[pallet::constant]
+		type ProposalsPerReferendum: Get<u32>;
+
+		/// Maximum votes a voter can use on any proposal in a referendum
 		#[pallet::constant]
 		type MaxVotes: Get<u32>;
 
+		/// AccountId used for testing, will be a part of the voter group
 		#[pallet::constant]
 		type TestVoter: Get<Self::AccountId>;
 
+		/// Currency for making proposal deposits
+		/// TODO: Not yet implemented
 		type Currency: ReservableCurrency<Self::AccountId>;
 
+		/// Identity pallet, used to allow users to register as voters
 		type Identity: IdentityInterface<Self::AccountId, Self::Hash>;
 	}
 
@@ -71,18 +84,21 @@ pub mod pallet {
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
+	/// Proposals that are queued to be used in the next referendum
+	/// T::ProposalsPerReferendum have to be queued for a referendum to start
 	#[pallet::storage]
 	#[pallet::getter(fn queued_proposals)]
 	pub type QueuedProposals<T: Config> =
 		StorageValue<_, BoundedVec<Proposal<T>, T::ProposalQueueSize>, ValueQuery>;
 
+	/// Referenda that have taken place thus far, also works as an index to the last referendum
 	#[pallet::storage]
 	#[pallet::getter(fn referendum_count)]
 	pub type ReferendumCount<T> = StorageValue<_, ReferendumIndex, ValueQuery>;
 
 	/// Storage info of all finished and ongoing referenda.
-	/// Inside each referenda, multiple proposals could be being voted on.
-	/// Twox64Concat is fine to use because referendum_index and proposal_index
+	/// Inside each referendum, T::ProposalsPerReferendum are voted on.
+	/// Twox64Concat is fine to use here because referendum_index and proposal_index
 	/// are not controlled by a user.
 	#[pallet::storage]
 	#[pallet::getter(fn referendum_info)]
@@ -95,14 +111,23 @@ pub mod pallet {
 		ProposalInfo<T::Hash, T::BlockNumber>,
 	>;
 
+	/// Time (in blocks) when the current referendum (if any) will end.
+	/// Currently, only one referendum can be active at a time.
+	/// TODO: Allow more than one?
 	#[pallet::storage]
 	#[pallet::getter(fn referendum_ends_at)]
 	pub type ReferendumEndsAt<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
+	/// Is there a referendum active right now?
+	/// TODO: Could derive this from other storage items.
 	#[pallet::storage]
 	#[pallet::getter(fn active_referendum)]
 	pub type ActiveReferendum<T: Config> = StorageValue<_, ()>;
 
+	/// Defines the set of all votes.
+	/// Users need to call `register_voter` to end up here.
+	/// Each voter has T::MaxVotes ** 2 points and only has less when he voted on a referendum.
+	/// Points are returned once the referendum ends.
 	#[pallet::storage]
 	#[pallet::getter(fn voter_points)]
 	pub type VoterPoints<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, Points>;
@@ -147,8 +172,6 @@ pub mod pallet {
 		ProposalTooLong,
 		/// Proposal queue is full
 		ProposalQueueFull,
-		// /// Proposal has already been submitted
-		// ProposalAlreadySubmitted,
 		/// No active referendum right now
 		NoActiveReferendum,
 		/// Overflow error
