@@ -268,7 +268,7 @@ parameter_types! {
 }
 
 /// Configure the pallet-template in pallets/template.
-impl pallet_template::Config for Runtime {
+impl pallet_quadratic_voting::Config for Runtime {
 	type Event = Event;
 	type MaxProposalLength = ConstU32<256>;
 	type LaunchPeriod = LaunchPeriod;
@@ -300,7 +300,7 @@ construct_runtime!(
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
-		TemplateModule: pallet_template,
+		QuadraticVoting: pallet_quadratic_voting,
 		Identity: pallet_basic_identity,
 	}
 );

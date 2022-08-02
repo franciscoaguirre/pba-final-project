@@ -1,4 +1,4 @@
-use crate as pallet_template;
+use crate as pallet_quadratic_voting;
 use frame_support::{
 	parameter_types,
 	traits::{ConstU16, ConstU32, ConstU64, GenesisBuild, Hooks},
@@ -22,7 +22,7 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system,
-		TemplateModule: pallet_template,
+		QuadraticVoting: pallet_quadratic_voting,
 		Balances: pallet_balances,
 		Identity: pallet_basic_identity,
 	}
@@ -74,7 +74,7 @@ parameter_types! {
 	pub const VotingPeriod: BlockNumber = 1;
 }
 
-impl pallet_template::Config for Test {
+impl pallet_quadratic_voting::Config for Test {
 	type Event = Event;
 	type MaxProposalLength = ConstU32<50>;
 	type LaunchPeriod = LaunchPeriod;
@@ -93,7 +93,7 @@ impl pallet_basic_identity::Config for Test {
 /// Builds genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	pallet_template::GenesisConfig::<Test>::default()
+	pallet_quadratic_voting::GenesisConfig::<Test>::default()
 		.assimilate_storage(&mut t)
 		.unwrap();
 	let mut ext = sp_io::TestExternalities::new(t);
@@ -104,13 +104,13 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 pub fn next_block() {
 	System::set_block_number(System::block_number() + 1);
 	System::on_initialize(System::block_number());
-	TemplateModule::on_initialize(System::block_number());
+	QuadraticVoting::on_initialize(System::block_number());
 }
 
 pub fn run_to_block(n: BlockNumber) {
 	while System::block_number() < n {
 		if System::block_number() > 1 {
-			TemplateModule::on_finalize(System::block_number());
+			QuadraticVoting::on_finalize(System::block_number());
 			System::on_finalize(System::block_number());
 		}
 		next_block();
