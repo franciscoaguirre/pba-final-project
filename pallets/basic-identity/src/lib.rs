@@ -1,8 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-/// Edit this file to define custom logic or remove it if it is not needed.
-/// Learn more about FRAME and the core library of Substrate FRAME pallets:
-/// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
 #[cfg(test)]
@@ -16,10 +13,7 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::{
-		pallet_prelude::*,
-		traits::{Currency, ReservableCurrency},
-	};
+	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 	use primitives::IdentityInterface;
 
@@ -28,11 +22,10 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-
-		type Currency: Currency<Self::AccountId>;
 	}
 
 	#[pallet::storage]
+	#[pallet::getter(fn identities)]
 	pub type Identities<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, T::Hash>;
 
 	#[pallet::pallet]
@@ -41,41 +34,55 @@ pub mod pallet {
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
-	pub enum Event<T: Config> {}
-
-	// Errors inform users that something went wrong.
-	#[pallet::error]
-	pub enum Error<T> {
-		// This user is not allowed to create an identity.
-		NotAuthorized,
+	pub enum Event<T: Config> {
+		/// User has been given an identity
+		IdentityCreated(T::AccountId, T::Hash),
+		/// Identity has been removed
+		IdentityDeleted(T::AccountId),
 	}
 
-	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
-	// These functions materialize as "extrinsics", which are often compared to transactions.
-	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
+	#[pallet::error]
+	pub enum Error<T> {
+		/// No identity
+		IdentityDoesNotExist,
+	}
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(0)]
+		#[pallet::weight(10_000)]
 		pub fn create_identity(
 			origin: OriginFor<T>,
 			who: T::AccountId,
 			name: T::Hash,
 		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
-			ensure!(Self::check_caller(&caller), Error::<T>::NotAuthorized);
+			ensure_root(origin)?;
 			Self::set_identity(&who, name);
+			Self::deposit_event(Event::<T>::IdentityCreated(who, name));
+			Ok(())
+		}
+
+		#[pallet::weight(10_000)]
+		pub fn delete_identity(origin: OriginFor<T>, who: T::AccountId) -> DispatchResult {
+			ensure_root(origin)?;
+			ensure!(Self::has_identity(&who), Error::<T>::IdentityDoesNotExist);
+			Self::clear_identity(&who);
+			Self::deposit_event(Event::<T>::IdentityDeleted(who));
 			Ok(())
 		}
 	}
 }
 
 impl<T: Config> primitives::IdentityInterface<T::AccountId, T::Hash> for Pallet<T> {
-	fn check_caller(caller: &T::AccountId) -> bool {
-		true
+	fn has_identity(who: &T::AccountId) -> bool {
+		Identities::<T>::get(who).is_some()
 	}
 
 	fn set_identity(who: &T::AccountId, name: T::Hash) {
 		Identities::<T>::insert(who, name);
+	}
+
+	fn clear_identity(who: &T::AccountId) {
+		Identities::<T>::remove(who);
 	}
 
 	fn get_identity(who: &T::AccountId) -> Option<T::Hash> {

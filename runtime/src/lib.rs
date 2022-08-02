@@ -277,6 +277,11 @@ impl pallet_template::Config for Runtime {
 	type Currency = Balances;
 	type MaxVotes = ConstU32<10>;
 	type TestVoter = ConstU64<1>;
+	type Identity = Identity;
+}
+
+impl pallet_basic_identity::Config for Runtime {
+	type Event = Event;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -296,6 +301,7 @@ construct_runtime!(
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
+		Identity: pallet_basic_identity,
 	}
 );
 

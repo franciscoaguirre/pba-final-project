@@ -1,9 +1,5 @@
-use crate as pallet_template;
-use frame_support::{
-	instances::{Instance1, Instance2},
-	pallet_prelude::{ConstU32, Get},
-	traits::{ConstU16, ConstU64, Currency},
-};
+use crate as pallet_basic_identity;
+use frame_support::traits::{ConstU16, ConstU64, GenesisBuild};
 use frame_system as system;
 use sp_core::H256;
 use sp_runtime::{
@@ -22,9 +18,8 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system,
-		TemplateModule: pallet_template,
-		Balances: pallet_balances::<Instance1>,
-		Balances2: pallet_balances::<Instance2>,
+		Identity: pallet_basic_identity,
+		Sudo: pallet_sudo,
 	}
 );
 
@@ -48,7 +43,7 @@ impl system::Config for Test {
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = pallet_balances::AccountData<Balance>;
+	type AccountData = ();
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -57,45 +52,24 @@ impl system::Config for Test {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-impl pallet_template::Config for Test {
+impl pallet_basic_identity::Config for Test {
 	type Event = Event;
-	type Currency = Balances;
 }
 
-type Balance = u64;
-
-use frame_support::traits::StorageMapShim;
-
-impl pallet_balances::Config<Instance1> for Test {
-	type MaxLocks = ();
-	type MaxReserves = ();
-	type ReserveIdentifier = [u8; 8];
-	type Balance = Balance;
-	type DustRemoval = ();
+impl pallet_sudo::Config for Test {
 	type Event = Event;
-	type ExistentialDeposit = ConstU64<1>;
-	type AccountStore = System;
-	type WeightInfo = ();
+	type Call = Call;
 }
 
-impl pallet_balances::Config<Instance2> for Test {
-	type MaxLocks = ();
-	type MaxReserves = ();
-	type ReserveIdentifier = [u8; 8];
-	type Balance = Balance;
-	type DustRemoval = ();
-	type Event = Event;
-	type ExistentialDeposit = ConstU64<1>;
-	type AccountStore = StorageMapShim<
-		pallet_balances::pallet::Account<Test, Instance2>,
-		frame_system::Provider<Test>,
-		AccountId,
-		pallet_balances::AccountData<Balance>,
-	>;
-	type WeightInfo = ();
-}
+pub type IdentityCall = pallet_basic_identity::Call<Test>;
 
 // Build genesis storage according to the mock runtime.
-pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+pub fn new_test_ext(root_key: u64) -> sp_io::TestExternalities {
+	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	pallet_sudo::GenesisConfig::<Test> { key: Some(root_key) }
+		.assimilate_storage(&mut t)
+		.unwrap();
+	let mut ext = sp_io::TestExternalities::new(t);
+	ext.execute_with(|| System::set_block_number(1));
+	ext
 }

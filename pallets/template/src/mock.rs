@@ -24,6 +24,7 @@ frame_support::construct_runtime!(
 		System: frame_system,
 		TemplateModule: pallet_template,
 		Balances: pallet_balances,
+		Identity: pallet_basic_identity,
 	}
 );
 
@@ -82,6 +83,11 @@ impl pallet_template::Config for Test {
 	type Currency = Balances;
 	type MaxVotes = ConstU32<10>;
 	type TestVoter = ConstU64<1>;
+	type Identity = Identity;
+}
+
+impl pallet_basic_identity::Config for Test {
+	type Event = Event;
 }
 
 /// Builds genesis storage according to the mock runtime.

@@ -15,12 +15,9 @@ mod types;
 
 pub use types::{FinishedProposalInfo, OngoingProposalInfo, ProposalInfo};
 
-use frame_support::{
-	dispatch::Weight,
-	pallet_prelude::*,
-	traits::{Currency, ReservableCurrency},
-};
+use frame_support::{dispatch::Weight, pallet_prelude::*, traits::ReservableCurrency};
 use frame_system::pallet_prelude::{BlockNumberFor, *};
+use primitives::IdentityInterface;
 use sp_core::Hasher;
 use sp_runtime::traits::{Saturating, Zero};
 use sp_std::vec::Vec;
@@ -66,6 +63,8 @@ pub mod pallet {
 		type TestVoter: Get<Self::AccountId>;
 
 		type Currency: ReservableCurrency<Self::AccountId>;
+
+		type Identity: IdentityInterface<Self::AccountId, Self::Hash>;
 	}
 
 	#[pallet::pallet]
@@ -104,10 +103,9 @@ pub mod pallet {
 	#[pallet::getter(fn active_referendum)]
 	pub type ActiveReferendum<T: Config> = StorageValue<_, ()>;
 
-	// Is it safe to use twox here?
 	#[pallet::storage]
 	#[pallet::getter(fn voter_points)]
-	pub type VoterPoints<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, Points>;
+	pub type VoterPoints<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, Points>;
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
@@ -124,7 +122,9 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			VoterPoints::<T>::insert(T::TestVoter::get(), T::MaxVotes::get().pow(2));
+			T::Identity::set_identity(&T::TestVoter::get(), T::Hash::default());
+			Pallet::<T>::do_register_voter(T::TestVoter::get())
+				.expect("test voter identity set in genesis; qed");
 		}
 	}
 
@@ -165,6 +165,8 @@ pub mod pallet {
 		VoterAlreadyRegistered,
 		/// Already voted
 		AlreadyVoted,
+		/// User does not have an identity
+		NoIdentity,
 	}
 
 	#[pallet::hooks]
@@ -257,15 +259,19 @@ pub mod pallet {
 
 		#[pallet::weight(10_000)]
 		pub fn register_voter(_: OriginFor<T>, account: T::AccountId) -> DispatchResult {
-			// TODO: Require root or through proposals
-			ensure!(VoterPoints::<T>::get(&account) == None, Error::<T>::VoterAlreadyRegistered);
-			VoterPoints::<T>::insert(account, 100);
-			Ok(())
+			Self::do_register_voter(account)
 		}
 	}
 }
 
 impl<T: Config> Pallet<T> {
+	fn do_register_voter(account: T::AccountId) -> DispatchResult {
+		ensure!(T::Identity::has_identity(&account), Error::<T>::NoIdentity);
+		ensure!(VoterPoints::<T>::get(&account) == None, Error::<T>::VoterAlreadyRegistered);
+		VoterPoints::<T>::insert(account, 100);
+		Ok(())
+	}
+
 	fn start_referendum(block_number: T::BlockNumber) -> DispatchResult {
 		// Update referendum index
 		let referendum_index = Self::referendum_count();

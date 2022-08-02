@@ -3774,6 +3774,7 @@ dependencies = [
  "hex-literal",
  "pallet-aura",
  "pallet-balances",
+ "pallet-basic-identity",
  "pallet-grandpa",
  "pallet-randomness-collective-flip",
  "pallet-sudo",
@@ -4009,6 +4010,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-basic-identity"
+version = "4.0.0-dev"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "pallet-sudo",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+]
+
+[[package]]
 name = "pallet-grandpa"
 version = "4.0.0-dev"
 source = "git+https://github.com/paritytech/substrate.git?branch=polkadot-v0.9.26#e8a7d161f39db70cb27fdad6c6e215cf493ebc3b"
@@ -4088,7 +4106,9 @@ dependencies = [
  "frame-support",
  "frame-system",
  "pallet-balances",
+ "pallet-basic-identity",
  "parity-scale-codec",
+ "primitives",
  "scale-info",
  "sp-core",
  "sp-io",
@@ -4496,6 +4516,10 @@ dependencies = [
  "scale-info",
  "uint",
 ]
+
+[[package]]
+name = "primitives"
+version = "0.1.0"
 
 [[package]]
 name = "proc-macro-crate"
