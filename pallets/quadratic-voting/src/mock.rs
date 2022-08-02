@@ -79,11 +79,12 @@ impl pallet_quadratic_voting::Config for Test {
 	type MaxProposalLength = ConstU32<50>;
 	type LaunchPeriod = LaunchPeriod;
 	type VotingPeriod = VotingPeriod;
-	type ProposalQueueSize = ConstU32<1>;
+	type ProposalQueueSize = ConstU32<2>;
 	type Currency = Balances;
 	type MaxVotes = ConstU32<10>;
 	type TestVoter = ConstU64<1>;
 	type Identity = Identity;
+	type ProposalsPerReferendum = ConstU32<2>;
 }
 
 impl pallet_basic_identity::Config for Test {

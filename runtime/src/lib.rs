@@ -278,6 +278,7 @@ impl pallet_quadratic_voting::Config for Runtime {
 	type MaxVotes = ConstU32<10>;
 	type TestVoter = ConstU64<1>;
 	type Identity = Identity;
+	type ProposalsPerReferendum = ConstU32<10>;
 }
 
 impl pallet_basic_identity::Config for Runtime {
