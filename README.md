@@ -38,3 +38,10 @@ cargo test -p pallet-quadratic-voting
 ```sh
 cargo test -p pallet-basic-identity
 ```
+
+## Roadmap
+
+- [ ] Voting frontend
+- [ ] Store hash of proposals on-chain to save compute power
+- [ ] Have voters put down a deposit when submitting a proposal so as to not spam the network
+- [ ] Benchmarking
