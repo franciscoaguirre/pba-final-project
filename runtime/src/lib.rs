@@ -264,7 +264,7 @@ impl pallet_sudo::Config for Runtime {
 
 parameter_types! {
 	pub const LaunchPeriod: BlockNumber = 10;
-	pub const VotingPeriod: BlockNumber = 10;
+	pub const VotingPeriod: BlockNumber = 3;
 }
 
 /// Configure the pallet-template in pallets/template.
@@ -277,7 +277,7 @@ impl pallet_quadratic_voting::Config for Runtime {
 	type Currency = Balances;
 	type MaxVotes = ConstU32<10>;
 	type Identity = Identity;
-	type ProposalsPerReferendum = ConstU32<10>;
+	type ProposalsPerReferendum = ConstU32<2>;
 }
 
 impl pallet_basic_identity::Config for Runtime {

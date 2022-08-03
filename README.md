@@ -11,8 +11,8 @@ deciding how to distribute their voting power (points) in a [quadratic manner](h
   Users need to register as voters before they begin submitting anything.
   To do this they need an identity from the basic identity pallet.
   Voters can submit proposals in plain text, these are put in a queue.
-  Every N blocks (configurable, by default 10), a referendum will start
-  and pick M proposals (also configurable, default 10) from the queue for voters to vote on.
+  Every N blocks (configurable, by default 3), a referendum will start
+  and pick M proposals (also configurable, default 2) from the queue for voters to vote on.
   When there's an active referendum running, voters can submit votes for each of the proposals
   on that referendum.
 

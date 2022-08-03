@@ -53,6 +53,7 @@ pub mod pallet {
 		type LaunchPeriod: Get<Self::BlockNumber>;
 
 		/// How long (in blocks) referenda allow votes for until they end
+		/// Needs to be lower than `LaunchPeriod` to work well
 		#[pallet::constant]
 		type VotingPeriod: Get<Self::BlockNumber>;
 
@@ -158,9 +159,9 @@ pub mod pallet {
 		/// A vote was successfully submitted
 		VoteSubmitted(ReferendumVotes<T>, T::AccountId),
 		/// Started a referendum
-		ReferendumStarted(ReferendumIndex),
+		ReferendumStarted(ReferendumIndex, Vec<Proposal<T>>),
 		/// Referendum ended
-		ReferendumEnded(ReferendumIndex),
+		ReferendumEnded(ReferendumIndex, Vec<ProposalInfo<T::Hash, T::BlockNumber>>),
 	}
 
 	#[pallet::error]
@@ -314,9 +315,12 @@ impl<T: Config> Pallet<T> {
 			Error::<T>::NotEnoughProposalsInQueue
 		);
 
+		let mut proposal_texts = Vec::new();
+
 		queued_proposals
 			.drain(0..T::ProposalsPerReferendum::get() as usize)
 			.map(|proposal_text| {
+				proposal_texts.push(proposal_text.clone());
 				// TODO: Optimize, store the hash on-chain to reuse
 				<<T as frame_system::Config>::Hashing as Hasher>::hash(&proposal_text)
 			})
@@ -340,7 +344,7 @@ impl<T: Config> Pallet<T> {
 		ReferendumEndsAt::<T>::put(block_number.saturating_add(T::VotingPeriod::get()));
 		ActiveReferendum::<T>::put(());
 
-		Self::deposit_event(Event::<T>::ReferendumStarted(referendum_index));
+		Self::deposit_event(Event::<T>::ReferendumStarted(referendum_index, proposal_texts));
 
 		Ok(())
 	}
@@ -348,6 +352,8 @@ impl<T: Config> Pallet<T> {
 	fn end_referendum() -> DispatchResult {
 		let referendum_index = Self::referendum_count();
 		let end = Self::referendum_ends_at();
+
+		let mut finished_proposals = Vec::new();
 
 		for proposal_index in 0..T::ProposalsPerReferendum::get() {
 			let old_proposal_info = ReferendumInfo::<T>::get(referendum_index, proposal_index)
@@ -361,6 +367,8 @@ impl<T: Config> Pallet<T> {
 
 			let new_proposal_info = ProposalInfo::Finished(FinishedProposalInfo { approved, end });
 
+			finished_proposals.push(new_proposal_info.clone());
+
 			ReferendumInfo::<T>::insert(referendum_index, proposal_index, new_proposal_info);
 		}
 
@@ -368,7 +376,7 @@ impl<T: Config> Pallet<T> {
 		ActiveReferendum::<T>::kill();
 		ReferendumCount::<T>::put(referendum_index + 1);
 
-		Self::deposit_event(Event::<T>::ReferendumEnded(referendum_index));
+		Self::deposit_event(Event::<T>::ReferendumEnded(referendum_index, finished_proposals));
 
 		Ok(())
 	}
