@@ -70,11 +70,13 @@ fn referendum_closes_after_voting_period_blocks() {
 		QuadraticVoting::submit_proposal(Origin::signed(1), "Should we fill the queue?".encode())
 			.unwrap();
 		QuadraticVoting::submit_proposal(Origin::signed(1), "Should we do it?".encode()).unwrap();
+		assert_eq!(QuadraticVoting::queued_proposals().len(), 2);
 		run_to_block(LaunchPeriod::get());
 		assert_eq!(QuadraticVoting::active_referendum(), Some(()));
 		assert_eq!(QuadraticVoting::referendum_ends_at(), 3);
 		next_block();
 		assert_eq!(QuadraticVoting::active_referendum(), None);
+		assert_eq!(QuadraticVoting::queued_proposals().len(), 0);
 	});
 }
 

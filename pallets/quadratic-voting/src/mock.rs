@@ -82,7 +82,6 @@ impl pallet_quadratic_voting::Config for Test {
 	type ProposalQueueSize = ConstU32<2>;
 	type Currency = Balances;
 	type MaxVotes = ConstU32<10>;
-	type TestVoter = ConstU64<1>;
 	type Identity = Identity;
 	type ProposalsPerReferendum = ConstU32<2>;
 }
@@ -94,7 +93,7 @@ impl pallet_basic_identity::Config for Test {
 /// Builds genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	pallet_quadratic_voting::GenesisConfig::<Test>::default()
+	pallet_quadratic_voting::GenesisConfig::<Test> { voters: vec![1], ..Default::default() }
 		.assimilate_storage(&mut t)
 		.unwrap();
 	let mut ext = sp_io::TestExternalities::new(t);

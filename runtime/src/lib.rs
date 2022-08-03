@@ -44,7 +44,7 @@ pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
 /// Import the template pallet.
-pub use pallet_template;
+pub use pallet_quadratic_voting;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -276,7 +276,6 @@ impl pallet_quadratic_voting::Config for Runtime {
 	type ProposalQueueSize = ConstU32<100>;
 	type Currency = Balances;
 	type MaxVotes = ConstU32<10>;
-	type TestVoter = ConstU64<1>;
 	type Identity = Identity;
 	type ProposalsPerReferendum = ConstU32<10>;
 }
@@ -347,7 +346,7 @@ mod benches {
 		[frame_system, SystemBench::<Runtime>]
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
-		[pallet_template, TemplateModule]
+		[pallet_quadratic_voting, QuadraticVoting]
 	);
 }
 

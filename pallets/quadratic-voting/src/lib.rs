@@ -64,10 +64,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxVotes: Get<u32>;
 
-		/// AccountId used for testing, will be a part of the voter group
-		#[pallet::constant]
-		type TestVoter: Get<Self::AccountId>;
-
 		/// Currency for making proposal deposits
 		/// TODO: Not yet implemented
 		type Currency: ReservableCurrency<Self::AccountId>;
@@ -130,28 +126,33 @@ pub mod pallet {
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T: Config> {
-		_phantom: sp_std::marker::PhantomData<T>,
+		pub _phantom: sp_std::marker::PhantomData<T>,
+		pub voters: Vec<T::AccountId>,
 	}
 
 	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			GenesisConfig { _phantom: Default::default() }
+			GenesisConfig { _phantom: Default::default(), voters: Vec::new() }
 		}
 	}
 
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			T::Identity::set_identity(&T::TestVoter::get(), T::Hash::default());
-			Pallet::<T>::do_register_voter(T::TestVoter::get())
-				.expect("test voter identity set in genesis; qed");
+			for voter in self.voters.iter() {
+				T::Identity::set_identity(voter, T::Hash::default());
+				Pallet::<T>::do_register_voter(voter.clone())
+					.expect("test voter identity set in genesis; qed");
+			}
 		}
 	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
+		/// A voter has been registered successfully
+		VoterRegistered,
 		/// A proposal was successfully submitted
 		ProposalSubmitted(Proposal<T>, T::AccountId),
 		/// A vote was successfully submitted
@@ -304,10 +305,8 @@ impl<T: Config> Pallet<T> {
 	}
 
 	fn start_referendum(block_number: T::BlockNumber) -> DispatchResult {
-		// Update referendum index
 		let referendum_index = Self::referendum_count();
 
-		// Build proposal info struct
 		let mut queued_proposals = Self::queued_proposals();
 
 		ensure!(
@@ -315,10 +314,10 @@ impl<T: Config> Pallet<T> {
 			Error::<T>::NotEnoughProposalsInQueue
 		);
 
-		// TODO: Optimize, store the hash on-chain to reuse
 		queued_proposals
 			.drain(0..T::ProposalsPerReferendum::get() as usize)
 			.map(|proposal_text| {
+				// TODO: Optimize, store the hash on-chain to reuse
 				<<T as frame_system::Config>::Hashing as Hasher>::hash(&proposal_text)
 			})
 			.enumerate()
@@ -335,6 +334,8 @@ impl<T: Config> Pallet<T> {
 				);
 			});
 
+		QueuedProposals::<T>::put(queued_proposals);
+
 		// Update current referendum related variables
 		ReferendumEndsAt::<T>::put(block_number.saturating_add(T::VotingPeriod::get()));
 		ActiveReferendum::<T>::put(());
@@ -348,21 +349,22 @@ impl<T: Config> Pallet<T> {
 		let referendum_index = Self::referendum_count();
 		let end = Self::referendum_ends_at();
 
-		// TODO: Handle multiple proposals in the future
-		let proposal_index = 0 as ProposalIndex;
+		for proposal_index in 0..T::ProposalsPerReferendum::get() {
+			let old_proposal_info = ReferendumInfo::<T>::get(referendum_index, proposal_index)
+				.expect("referendum is ending, old proposal exists; qed");
 
-		let old_proposal_info = ReferendumInfo::<T>::get(referendum_index, proposal_index)
-			.expect("referendum is ending, old proposal exists; qed");
+			let approved = match old_proposal_info {
+				ProposalInfo::Ongoing(ongoing_proposal_info) =>
+					ongoing_proposal_info.tally.result(),
+				ProposalInfo::Finished(_) => panic!("Old proposal has to be ongoing; qed"),
+			};
 
-		let approved = match old_proposal_info {
-			ProposalInfo::Ongoing(ongoing_proposal_info) => ongoing_proposal_info.tally.result(),
-			ProposalInfo::Finished(_) => panic!("Old proposal has to be ongoing; qed"),
-		};
+			let new_proposal_info = ProposalInfo::Finished(FinishedProposalInfo { approved, end });
 
-		let new_proposal_info = ProposalInfo::Finished(FinishedProposalInfo { approved, end });
+			ReferendumInfo::<T>::insert(referendum_index, proposal_index, new_proposal_info);
+		}
 
-		ReferendumInfo::<T>::insert(referendum_index, proposal_index, new_proposal_info);
-
+		// Update active referendum related variables
 		ActiveReferendum::<T>::kill();
 		ReferendumCount::<T>::put(referendum_index + 1);
 
