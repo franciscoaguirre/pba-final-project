@@ -15,7 +15,7 @@ mod types;
 
 pub use types::{FinishedProposalInfo, OngoingProposalInfo, ProposalInfo, Vote};
 
-use frame_support::{dispatch::Weight, pallet_prelude::*, traits::ReservableCurrency};
+use frame_support::{dispatch::Weight, pallet_prelude::*};
 use frame_system::pallet_prelude::{BlockNumberFor, *};
 use primitives::IdentityInterface;
 use sp_core::Hasher;
@@ -65,10 +65,6 @@ pub mod pallet {
 		#[pallet::constant]
 		type MaxVotes: Get<u32>;
 
-		/// Currency for making proposal deposits
-		/// TODO: Not yet implemented
-		type Currency: ReservableCurrency<Self::AccountId>;
-
 		/// Identity pallet, used to allow users to register as voters
 		type Identity: IdentityInterface<Self::AccountId, Self::Hash>;
 	}
@@ -106,13 +102,11 @@ pub mod pallet {
 
 	/// Time (in blocks) when the current referendum (if any) will end.
 	/// Currently, only one referendum can be active at a time.
-	/// TODO: Allow more than one?
 	#[pallet::storage]
 	#[pallet::getter(fn referendum_ends_at)]
 	pub type ReferendumEndsAt<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
 	/// Is there a referendum active right now?
-	/// TODO: Could derive this from other storage items.
 	#[pallet::storage]
 	#[pallet::getter(fn active_referendum)]
 	pub type ActiveReferendum<T: Config> = StorageValue<_, ()>;
@@ -195,19 +189,22 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(block_number: BlockNumberFor<T>) -> Weight {
+			let mut weight = 0;
+
 			let referendum_ends_at = ReferendumEndsAt::<T>::get();
 
 			if block_number == referendum_ends_at {
 				let _ = Self::end_referendum(); // TODO: Deal with error
+
+				weight += 5_000 * T::ProposalsPerReferendum::get();
 			}
 
 			if (block_number % T::LaunchPeriod::get()).is_zero() {
 				let _ = Self::start_referendum(block_number); // TODO: Deal with error
+				weight += 10_000 * T::ProposalsPerReferendum::get();
 			}
 
-			// TODO: What weight should I return here?
-
-			0
+			weight.into()
 		}
 	}
 
@@ -321,7 +318,6 @@ impl<T: Config> Pallet<T> {
 			.drain(0..T::ProposalsPerReferendum::get() as usize)
 			.map(|proposal_text| {
 				proposal_texts.push(proposal_text.clone());
-				// TODO: Optimize, store the hash on-chain to reuse
 				<<T as frame_system::Config>::Hashing as Hasher>::hash(&proposal_text)
 			})
 			.enumerate()
@@ -330,7 +326,6 @@ impl<T: Config> Pallet<T> {
 					OngoingProposalInfo { proposal_hash, tally: Default::default() };
 				let proposal_info = ProposalInfo::Ongoing(ongoing_proposal_info);
 
-				// Insert new proposal info, TODO: Optimize?
 				ReferendumInfo::<T>::insert(
 					referendum_index,
 					index as ProposalIndex,
@@ -394,12 +389,10 @@ impl<T: Config> Pallet<T> {
 	fn take_points_from_voter(account: &T::AccountId, votes: u32) {
 		let available_points =
 			VoterPoints::<T>::get(account).expect("check should be done outside this function");
-		// TODO: Use checked_sub? `has_enough_points` should've been called already
+		// `has_enough_points` should've been called already
 		VoterPoints::<T>::insert(account, available_points - votes.pow(2));
 	}
 
-	// TODO: Let them change their vote
-	// For that I need to store what they voted before
 	fn already_voted(account: &T::AccountId) -> bool {
 		let available_points =
 			VoterPoints::<T>::get(account).expect("check should be done outside this function");

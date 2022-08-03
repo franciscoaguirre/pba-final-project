@@ -80,7 +80,6 @@ impl pallet_quadratic_voting::Config for Test {
 	type LaunchPeriod = LaunchPeriod;
 	type VotingPeriod = VotingPeriod;
 	type ProposalQueueSize = ConstU32<2>;
-	type Currency = Balances;
 	type MaxVotes = ConstU32<10>;
 	type Identity = Identity;
 	type ProposalsPerReferendum = ConstU32<2>;

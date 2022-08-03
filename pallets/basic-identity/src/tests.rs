@@ -21,11 +21,6 @@ fn user_identity_gets_deleted() {
 	let root_key = 1u64;
 	new_test_ext(root_key).execute_with(|| {
 		let delete_identity = Box::new(Call::Identity(IdentityCall::delete_identity { who: 0u64 }));
-		// TODO: Why doesn't this work?
-		// assert_noop!(
-		// 	Sudo::sudo(Origin::signed(root_key), delete_identity.clone()),
-		// 	Error::<Test>::IdentityDoesNotExist
-		// );
 		let create_identity = Box::new(Call::Identity(IdentityCall::create_identity {
 			who: 0u64,
 			name: H256::zero(),

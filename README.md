@@ -39,9 +39,13 @@ cargo test -p pallet-quadratic-voting
 cargo test -p pallet-basic-identity
 ```
 
-## Roadmap
+## Things to improve
 
-- [ ] Voting frontend
-- [ ] Store hash of proposals on-chain to save compute power
-- [ ] Have voters put down a deposit when submitting a proposal so as to not spam the network
-- [ ] Benchmarking
+- Make a frontend! (need to get better with polkadot.js)
+- Store hash of proposals on-chain to not have to compute it each time
+- Store a map from hashes to proposal text to allow frontend to see the text
+- Have voters put down a deposit when submitting a proposal so as to not spam the network
+- Allow multiple referenda to be held at the same time
+- Optimize `on_initialize` as much as possible and remove possible panics (expect, looking at you)
+  Do less work, not allow a referendum to end and a new one to start on the same block
+- Benchmarking
